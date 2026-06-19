@@ -479,6 +479,7 @@ app.get("/health", (_req: any, res: any) => {
   res.json({
     ok: true,
     service: "paylo-catalog-mcp",
+    version: "1.0.1",
     apiBaseUrl: API_BASE_URL,
     usingApiKeyMap: apiKeyToSource.size > 0,
   });
@@ -588,8 +589,12 @@ async function handleStreamableHttp(req: any, res: any): Promise<void> {
   }
 }
 
-app.all("/", handleStreamableHttp);
-app.all("/mcp", handleStreamableHttp);
+app.post("/", handleStreamableHttp);
+app.get("/", handleStreamableHttp);
+app.delete("/", handleStreamableHttp);
+app.post("/mcp", handleStreamableHttp);
+app.get("/mcp", handleStreamableHttp);
+app.delete("/mcp", handleStreamableHttp);
 
 app.listen(PORT, () => {
   console.log(`Paylo catalog MCP SSE server listening on http://${HOST}:${PORT}`);

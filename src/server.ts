@@ -147,19 +147,12 @@ type StorefrontCatalogData = {
   categories?: unknown[];
 };
 
-const server = new McpServer(
-  {
-    name: "paylo-catalog-mcp",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
-
-const mcp: any = server;
+function createPayloServer(): McpServer {
+  const s = new McpServer(
+    { name: "paylo-catalog-mcp", version: "1.0.0" },
+    { capabilities: { tools: {} } }
+  );
+  const mcp: any = s;
 
 mcp.tool(
   "search_storefronts",
@@ -470,6 +463,11 @@ mcp.tool(
   }
 );
 
+  return s;
+}
+
+const server = createPayloServer();
+
 server.server.onerror = (error) => {
   console.error("MCP server error:", error);
 };
@@ -558,8 +556,10 @@ app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
 app.all("/mcp", async (req: any, res: any) => {
   try {
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await server.connect(transport);
+    const s = createPayloServer();
+    await s.connect(transport);
     await transport.handleRequest(req, res, req.body);
+    res.on("finish", () => { s.close().catch(() => {}); });
   } catch (error) {
     console.error("Streamable HTTP error:", error);
     if (!res.headersSent) {

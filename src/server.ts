@@ -6,6 +6,7 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 
 dotenv.config();
@@ -553,13 +554,32 @@ app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
   });
 });
 
+const httpSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
+
 app.all("/mcp", async (req: any, res: any) => {
   try {
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+    if (sessionId && httpSessions.has(sessionId)) {
+      const { transport } = httpSessions.get(sessionId)!;
+      await transport.handleRequest(req, res, req.body);
+      return;
+    }
+
     const s = createPayloServer();
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sid) => {
+        httpSessions.set(sid, { transport, server: s });
+      },
+    });
+
+    transport.onclose = () => {
+      if (transport.sessionId) httpSessions.delete(transport.sessionId);
+    };
+
     await s.connect(transport);
     await transport.handleRequest(req, res, req.body);
-    res.on("finish", () => { s.close().catch(() => {}); });
   } catch (error) {
     console.error("Streamable HTTP error:", error);
     if (!res.headersSent) {

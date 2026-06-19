@@ -1,0 +1,5 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: url
+  url: https://mcp.usepaylo.com/sse

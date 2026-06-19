@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { z } from "zod";
 
@@ -533,6 +534,36 @@ app.post("/messages", async (req: any, res: any) => {
     console.error("Error handling MCP message:", error);
     if (!res.headersSent) {
       res.status(500).send("Failed to handle MCP message");
+    }
+  }
+});
+
+app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
+  res.json({
+    name: "Paylo Catalog MCP",
+    version: "1.0.0",
+    description: "Browse and search Paylo storefronts, products, and services across the Paylo merchant network.",
+    url: `https://mcp.usepaylo.com`,
+    tools: [
+      { name: "search_storefronts", description: "Search active Paylo storefronts by name, keyword, or category" },
+      { name: "get_storefront", description: "Get full catalog summary and stats for a storefront by slug" },
+      { name: "search_products", description: "Search products across all stores or within a specific storefront" },
+      { name: "get_product", description: "Get details for a single product by storefront slug and product slug" },
+      { name: "search_services", description: "Search services across all stores or within a specific storefront" },
+      { name: "get_categories", description: "List categories available within a storefront" },
+    ],
+  });
+});
+
+app.all("/mcp", async (req: any, res: any) => {
+  try {
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error("Streamable HTTP error:", error);
+    if (!res.headersSent) {
+      res.status(500).send("MCP handler error");
     }
   }
 });

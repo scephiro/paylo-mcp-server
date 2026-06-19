@@ -1,0 +1,43 @@
+{
+  "name": "paylo-mcp-server",
+  "version": "0.1.0",
+  "description": "Universal commerce protocol for AI agents to browse, search, and interact with Paylo stores",
+  "keywords": [
+    "paylo",
+    "commerce",
+    "mcp",
+    "model context protocol",
+    "ai-shopping"
+  ],
+  "author": "Paylo",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "paylo-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "mcp": "tsx src/server.ts",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "test-services": "node test-services.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@supabase/supabase-js": "^2.86.0",
+    "dotenv": "^16.4.7",
+    "dotenv-cli": "^8.0.0",
+    "install": "^0.13.0",
+    "npm": "^11.2.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "tsx": "^4.20.3",
+    "typescript": "^5.3.3"
+  }
+}

@@ -17,7 +17,6 @@ const API_BASE_URL = (process.env.PAYLO_API_BASE_URL || "https://usepaylo.com").
 const GPT_API_SECRET = process.env.PAYLO_GPT_API_SECRET || process.env.GPT_API_SECRET || "";
 const PORT = Number(process.env.MCP_PORT || 3030);
 const HOST = process.env.MCP_HOST || "0.0.0.0";
-const DEFAULT_UTM_SOURCE = process.env.DEFAULT_UTM_SOURCE || "ai";
 
 const sessionToSource = new Map<string, string>();
 const transports: Record<string, SSEServerTransport> = {};
@@ -270,15 +269,15 @@ mcp.tool(
     }
 
     const storesPayload = await fetchFromApi<{ success: boolean; data?: { storefronts: Array<{ slug: string }> } }>("/api/gpt/storefronts");
-    const storefronts = (storesPayload.data?.storefronts || []).slice(0, 12);
-    const perStoreLimit = Math.max(1, Math.ceil(limit / Math.max(1, storefronts.length)));
+    const storefronts = storesPayload.data?.storefronts || [];
+    const PER_STORE_LIMIT = 5;
 
     const results = await Promise.all(
       storefronts.map(async (store) => {
         const params = new URLSearchParams({
           search: args.query,
           page: "1",
-          limit: String(perStoreLimit),
+          limit: String(PER_STORE_LIMIT),
           utmSource: source,
         });
         if (args.category) params.set("category", args.category);
@@ -398,15 +397,15 @@ mcp.tool(
     }
 
     const storesPayload = await fetchFromApi<{ success: boolean; data?: { storefronts: Array<{ slug: string }> } }>("/api/gpt/storefronts");
-    const storefronts = (storesPayload.data?.storefronts || []).slice(0, 12);
-    const perStoreLimit = Math.max(1, Math.ceil(limit / Math.max(1, storefronts.length)));
+    const storefronts = storesPayload.data?.storefronts || [];
+    const PER_STORE_LIMIT = 5;
 
     const results = await Promise.all(
       storefronts.map(async (store) => {
         const params = new URLSearchParams({
           search: args.query,
           page: "1",
-          limit: String(perStoreLimit),
+          limit: String(PER_STORE_LIMIT),
           utmSource: source,
         });
         if (args.category) params.set("category", args.category);

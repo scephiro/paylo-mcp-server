@@ -556,7 +556,7 @@ app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
 
 const httpSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
 
-app.all("/mcp", async (req: any, res: any) => {
+async function handleStreamableHttp(req: any, res: any): Promise<void> {
   try {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
@@ -586,7 +586,10 @@ app.all("/mcp", async (req: any, res: any) => {
       res.status(500).send("MCP handler error");
     }
   }
-});
+}
+
+app.all("/", handleStreamableHttp);
+app.all("/mcp", handleStreamableHttp);
 
 app.listen(PORT, () => {
   console.log(`Paylo catalog MCP SSE server listening on http://${HOST}:${PORT}`);

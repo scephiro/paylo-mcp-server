@@ -156,41 +156,53 @@ function createPayloServer(): McpServer {
 
 mcp.tool(
   "search_storefronts",
-  "Search Paylo storefronts with optional query and category filters.",
+  "Discover verified, escrow-protected Paylo storefronts. Filter by Nigerian state, product category, area (LGA/city) and/or free text — e.g. 'phone sellers in Lagos' or 'beauty stores in Abuja'. Only quality-gated sellers are returned (verified, with a logo, a cover image and at least one live listing), ordered by number of live listings. Each result carries trust signals (verified, escrowProtected), location (state, area) and its storefront URL.",
   {
-    query: z.string().optional(),
-    category: z.string().optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    query: z.string().optional().describe("Free text over name, description, category and area."),
+    category: z
+      .enum(["fashion", "beauty", "food-and-beverage", "home-and-living", "health", "electronics", "services"])
+      .optional()
+      .describe("Canonical product category."),
+    state: z.string().optional().describe("Nigerian state slug or name, e.g. 'lagos', 'ogun', 'abuja'/'FCT'."),
+    area: z.string().optional().describe("LGA/city area within a state, e.g. 'abuja-municipal'."),
+    limit: z.number().int().min(1).max(200).optional(),
   },
   async (args: any, extra: any) => {
     const source = sourceFromExtra(extra);
-    const payload = await fetchFromApi<{ success: boolean; data?: { storefronts: any[] } }>("/api/gpt/storefronts");
-    const storefronts = payload.data?.storefronts || [];
 
-    const q = args.query?.toLowerCase().trim();
-    const cat = args.category?.toLowerCase().trim();
+    // All filtering happens server-side against the quality-gated directory set.
+    const params = new URLSearchParams();
+    if (args.query) params.set("q", String(args.query));
+    if (args.category) params.set("category", String(args.category));
+    if (args.state) params.set("state", String(args.state));
+    if (args.area) params.set("area", String(args.area));
+    params.set("limit", String(args.limit || 50));
 
-    const filtered = storefronts
-      .filter((store) => {
-        const category = String(store.category || "").toLowerCase();
-        const haystack = `${store.name || ""} ${store.slug || ""} ${store.description || ""} ${category}`.toLowerCase();
-        if (q && !haystack.includes(q)) return false;
-        if (cat && category !== cat) return false;
-        return true;
-      })
-      .slice(0, args.limit || 50)
-      .map((store) => ({
-        ...store,
-        urls: {
-          storefront: withAIUTM(`${API_BASE_URL}/${store.slug}`, source),
-          products: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/products`, source),
-          services: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/services`, source),
-          categories: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/categories`, source),
-        },
-      }));
+    const payload = await fetchFromApi<{ success: boolean; data?: { storefronts: any[]; total?: number } }>(
+      "/api/gpt/storefronts",
+      params
+    );
+    const storefronts = (payload.data?.storefronts || []).map((store) => ({
+      ...store,
+      urls: {
+        storefront: withAIUTM(`${API_BASE_URL}/${store.slug}`, source),
+        products: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/products`, source),
+        services: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/services`, source),
+        categories: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/categories`, source),
+      },
+    }));
 
     return {
-      content: [{ type: "text", text: JSON.stringify({ storefronts: filtered, total: filtered.length }, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            { storefronts, returned: storefronts.length, total: payload.data?.total ?? storefronts.length },
+            null,
+            2
+          ),
+        },
+      ],
     };
   }
 );
@@ -268,7 +280,15 @@ mcp.tool(
       };
     }
 
-    const storesPayload = await fetchFromApi<{ success: boolean; data?: { storefronts: Array<{ slug: string }> } }>("/api/gpt/storefronts");
+    // Fan out only over the strongest quality-gated stores (the endpoint sorts
+    // by live-listing count), narrowed by category when given, so cross-store
+    // search stays bounded instead of hitting every active storefront.
+    const storesParams = new URLSearchParams({ limit: "25" });
+    if (args.category) storesParams.set("category", String(args.category));
+    const storesPayload = await fetchFromApi<{ success: boolean; data?: { storefronts: Array<{ slug: string }> } }>(
+      "/api/gpt/storefronts",
+      storesParams
+    );
     const storefronts = storesPayload.data?.storefronts || [];
     const PER_STORE_LIMIT = 5;
 
@@ -396,7 +416,15 @@ mcp.tool(
       };
     }
 
-    const storesPayload = await fetchFromApi<{ success: boolean; data?: { storefronts: Array<{ slug: string }> } }>("/api/gpt/storefronts");
+    // Fan out only over the strongest quality-gated stores (the endpoint sorts
+    // by live-listing count), narrowed by category when given, so cross-store
+    // search stays bounded instead of hitting every active storefront.
+    const storesParams = new URLSearchParams({ limit: "25" });
+    if (args.category) storesParams.set("category", String(args.category));
+    const storesPayload = await fetchFromApi<{ success: boolean; data?: { storefronts: Array<{ slug: string }> } }>(
+      "/api/gpt/storefronts",
+      storesParams
+    );
     const storefronts = storesPayload.data?.storefronts || [];
     const PER_STORE_LIMIT = 5;
 
@@ -463,7 +491,87 @@ mcp.tool(
   }
 );
 
+mcp.tool(
+  "get_wishlist",
+  "Get a public Paylo wishlist by its share link or token: items, prices, and how much funding each item still needs.",
+  {
+    urlOrToken: z
+      .string()
+      .min(1)
+      .describe("A usepaylo.com/wishlist/... share link or the bare share token"),
+  },
+  async (args: any, extra: any) => {
+    const source = sourceFromExtra(extra);
+    const token = parseWishlistToken(args.urlOrToken);
+    if (!token) {
+      throw new Error("Could not extract a wishlist token from the provided input");
+    }
+
+    const payload = await fetchFromApi<{ success: boolean; data?: any }>(
+      `/api/gpt/wishlist/${encodeURIComponent(token)}`
+    );
+    if (!payload.success || !payload.data) {
+      throw new Error("Wishlist not found or not public");
+    }
+
+    const data = payload.data;
+    const items = (data.items || []).map((item: any) => ({
+      ...item,
+      price: formatNaira(item.price_kobo),
+      funding: item.funding
+        ? {
+            ...item.funding,
+            goal: formatNaira(item.funding.goal_kobo),
+            progress: formatNaira(item.funding.progress_kobo),
+            remaining: formatNaira(item.funding.remaining_kobo),
+          }
+        : null,
+    }));
+
+    const result = {
+      wishlist: {
+        ...data.wishlist,
+        url: withAIUTM(data.wishlist?.url || `${API_BASE_URL}/wishlist/${token}`, source),
+      },
+      items,
+      summary: data.summary
+        ? { ...data.summary, total_remaining: formatNaira(data.summary.total_remaining_kobo) }
+        : null,
+    };
+
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    };
+  }
+);
+
   return s;
+}
+
+// Accepts a full share link (with or without query string) or a bare token.
+function parseWishlistToken(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const url = new URL(trimmed);
+      const match = url.pathname.match(/\/wishlist\/([^\/]+)/i);
+      return match ? decodeURIComponent(match[1]) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const pathMatch = trimmed.match(/wishlist\/([^\/?#\s]+)/i);
+  if (pathMatch) return pathMatch[1];
+
+  return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
+}
+
+function formatNaira(kobo: unknown): string | null {
+  if (typeof kobo !== "number" || !Number.isFinite(kobo)) return null;
+  return `₦${(kobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 }
 
 const server = createPayloServer();
@@ -550,6 +658,7 @@ app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
       { name: "get_product", description: "Get details for a single product by storefront slug and product slug" },
       { name: "search_services", description: "Search services across all stores or within a specific storefront" },
       { name: "get_categories", description: "List categories available within a storefront" },
+      { name: "get_wishlist", description: "Get a public wishlist by share link or token, with item funding progress" },
     ],
   });
 });

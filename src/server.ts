@@ -150,7 +150,7 @@ type StorefrontCatalogData = {
 function createPayloServer(): McpServer {
   const s = new McpServer(
     { name: "paylo-catalog-mcp", version: "1.0.0" },
-    { capabilities: { tools: {} } }
+    { capabilities: { tools: {}, resources: {} } }
   );
   const mcp: any = s;
 
@@ -545,7 +545,105 @@ mcp.tool(
   }
 );
 
+mcp.tool(
+  "get_changelog",
+  "Paylo's product changelog — the record of features, improvements and fixes shipped to the platform, newest first. Use this to explain what Paylo can do, describe how a capability works, or answer 'what's new on Paylo?'. Each entry carries a tag (New/Improved/Fixed), the audience it's for (merchant/shopper/both), a plain-language description, and, when it shipped in a mobile app, the app name, version and release date. Filter by audience, status, a 'since' date, or free text.",
+  {
+    audience: z
+      .enum(["merchant", "shopper", "both"])
+      .optional()
+      .describe("Keep entries for sellers ('merchant') or buyers ('shopper'); either also includes shared ('both') entries."),
+    status: z.enum(["New", "Improved", "Fixed"]).optional().describe("Only this kind of change."),
+    since: z.string().optional().describe("ISO date (YYYY-MM-DD); only entries shipped on or after it."),
+    query: z.string().optional().describe("Free text over entry title and description, e.g. 'wishlist', 'POS', 'bookings'."),
+    limit: z.number().int().min(1).max(500).optional().describe("Max entries to return (default 200)."),
+  },
+  async (args: any, extra: any) => {
+    const source = sourceFromExtra(extra);
+    const params = new URLSearchParams();
+    if (args.audience) params.set("audience", String(args.audience));
+    if (args.status) params.set("status", String(args.status));
+    if (args.since) params.set("since", String(args.since));
+    if (args.query) params.set("q", String(args.query));
+    if (args.limit) params.set("limit", String(args.limit));
+
+    const payload = await fetchFromApi<{ success: boolean; data?: any }>("/api/gpt/changelog", params);
+    if (!payload.success || !payload.data) {
+      throw new Error("Could not load the Paylo changelog");
+    }
+
+    const data = applyUtmToAnyUrl(payload.data, source);
+    return {
+      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+    };
+  }
+);
+
+mcp.resource(
+  "paylo-changelog",
+  "paylo://changelog",
+  {
+    title: "Paylo Changelog",
+    description:
+      "The full record of features, improvements and fixes shipped to the Paylo platform, newest first. Background knowledge for explaining what Paylo does.",
+    mimeType: "text/markdown",
+  },
+  async (uri: URL, extra: any) => {
+    const source = sourceFromExtra(extra);
+    const payload = await fetchFromApi<{ success: boolean; data?: ChangelogData }>(
+      "/api/gpt/changelog",
+      new URLSearchParams({ limit: "500" })
+    );
+    const data = payload.data;
+    const text = data ? renderChangelogMarkdown(data, source) : "# Paylo Changelog\n\nUnavailable.";
+
+    return {
+      contents: [{ uri: uri.href, mimeType: "text/markdown", text }],
+    };
+  }
+);
+
   return s;
+}
+
+type ChangelogEntryData = {
+  tag: string;
+  title: string;
+  audience: string;
+  description?: string | null;
+  app?: string | null;
+  version?: string | null;
+  date?: string | null;
+};
+
+type ChangelogReleaseData = {
+  month: string;
+  headline: string;
+  entries: ChangelogEntryData[];
+};
+
+type ChangelogData = {
+  about?: string;
+  changelogUrl?: string;
+  releases: ChangelogReleaseData[];
+};
+
+function renderChangelogMarkdown(data: ChangelogData, source: string): string {
+  const lines: string[] = ["# Paylo Changelog"];
+  if (data.about) lines.push("", data.about);
+  if (data.changelogUrl) lines.push("", withAIUTM(data.changelogUrl, source));
+
+  for (const release of data.releases || []) {
+    lines.push("", `## ${release.month} — ${release.headline}`);
+    for (const e of release.entries || []) {
+      const meta = [e.audience, e.app && e.version ? `${e.app} v${e.version}` : e.app, e.date]
+        .filter(Boolean)
+        .join(" · ");
+      lines.push("", `**${e.tag}: ${e.title}**${meta ? ` _(${meta})_` : ""}`);
+      if (e.description) lines.push(e.description);
+    }
+  }
+  return lines.join("\n");
 }
 
 // Accepts a full share link (with or without query string) or a bare token.
@@ -659,6 +757,7 @@ app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
       { name: "search_services", description: "Search services across all stores or within a specific storefront" },
       { name: "get_categories", description: "List categories available within a storefront" },
       { name: "get_wishlist", description: "Get a public wishlist by share link or token, with item funding progress" },
+      { name: "get_changelog", description: "Explain Paylo's features from the platform changelog (filter by audience, status, date, or text)" },
     ],
   });
 });

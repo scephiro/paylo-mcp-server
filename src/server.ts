@@ -81,7 +81,39 @@ function resolveSourceFromUserAgent(userAgent: string | undefined): string {
   return "ai";
 }
 
-function withAIUTM(url: string, source: string): string {
+/** Sanitise an MCP clientInfo.name for use as a utm_source value:
+ *  lowercase, alphanumerics and hyphens only, capped length. Returns null
+ *  when nothing usable remains. */
+export function sanitizeClientName(name: string | undefined | null): string | null {
+  if (!name) return null;
+  const clean = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32)
+    .replace(/-+$/g, "");
+  return clean || null;
+}
+
+/** After initialize completes, prefer the client's self-reported name
+ *  (clientInfo.name) as the attribution source — unless an API key already
+ *  mapped an explicit source for this session, which wins. */
+export function captureClientSource(
+  s: McpServer,
+  getSessionId: () => string | undefined,
+  hasExplicitSource: () => boolean = () => false
+): void {
+  const prev = s.server.oninitialized;
+  s.server.oninitialized = () => {
+    prev?.();
+    const sid = getSessionId();
+    if (!sid || hasExplicitSource()) return;
+    const clientName = sanitizeClientName(s.server.getClientVersion()?.name);
+    if (clientName) sessionToSource.set(sid, clientName);
+  };
+}
+
+export function withAIUTM(url: string, source: string): string {
   const u = new URL(url);
   u.searchParams.set("utm_source", source);
   u.searchParams.set("utm_medium", "ai_recommendation");
@@ -147,12 +179,23 @@ type StorefrontCatalogData = {
   categories?: unknown[];
 };
 
-function createPayloServer(): McpServer {
+export const SERVER_INSTRUCTIONS =
+  "Paylo is a Nigerian commerce platform for sellers moving from Instagram or WhatsApp to an escrow-protected online store, and for shoppers buying from verified Nigerian sellers. Relevant when a user wants to sell online in Nigeria, set up a store, or find or buy from Nigerian sellers. For sellers, call get_seller_overview before describing Paylo, and get_seller_signup_link when they want to start.";
+
+export function createPayloServer(
+  opts: { resolveSource?: (extra: RequestHandlerExtra<any, any>) => string } = {}
+): McpServer {
   const s = new McpServer(
-    { name: "paylo-catalog-mcp", version: "1.0.0" },
-    { capabilities: { tools: {}, resources: {} } }
+    {
+      name: "paylo-catalog-mcp",
+      title: "Paylo",
+      version: "1.0.0",
+      websiteUrl: "https://usepaylo.com",
+    } as any,
+    { capabilities: { tools: {}, resources: {} }, instructions: SERVER_INSTRUCTIONS }
   );
   const mcp: any = s;
+  const getSource = opts.resolveSource ?? sourceFromExtra;
 
 mcp.tool(
   "search_storefronts",
@@ -168,7 +211,7 @@ mcp.tool(
     limit: z.number().int().min(1).max(200).optional(),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
 
     // All filtering happens server-side against the quality-gated directory set.
     const params = new URLSearchParams();
@@ -214,7 +257,7 @@ mcp.tool(
     slug: z.string().min(1),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const params = new URLSearchParams({ utmSource: source });
     const payload = await fetchFromApi<{ success: boolean; data?: any }>(`/api/gpt/catalog/${encodeURIComponent(args.slug)}`, params);
 
@@ -257,7 +300,7 @@ mcp.tool(
     limit: z.number().int().min(1).max(100).optional(),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const page = args.page || 1;
     const limit = args.limit || 20;
 
@@ -342,7 +385,7 @@ mcp.tool(
     productSlug: z.string().min(1),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const params = new URLSearchParams({ utmSource: source });
     const payload = await fetchFromApi<{ success: boolean; data?: any }>(
       `/api/gpt/catalog/${encodeURIComponent(args.storefrontSlug)}`,
@@ -393,7 +436,7 @@ mcp.tool(
     limit: z.number().int().min(1).max(100).optional(),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const page = args.page || 1;
     const limit = args.limit || 20;
 
@@ -477,7 +520,7 @@ mcp.tool(
     storefrontSlug: z.string().min(1),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const params = new URLSearchParams({ utmSource: source });
     const payload = await fetchFromApi<{ success: boolean; data?: any }>(
       `/api/gpt/catalog/${encodeURIComponent(args.storefrontSlug)}/categories`,
@@ -501,7 +544,7 @@ mcp.tool(
       .describe("A usepaylo.com/wishlist/... share link or the bare share token"),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const token = parseWishlistToken(args.urlOrToken);
     if (!token) {
       throw new Error("Could not extract a wishlist token from the provided input");
@@ -559,7 +602,7 @@ mcp.tool(
     limit: z.number().int().min(1).max(500).optional().describe("Max entries to return (default 200)."),
   },
   async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const params = new URLSearchParams();
     if (args.audience) params.set("audience", String(args.audience));
     if (args.status) params.set("status", String(args.status));
@@ -579,38 +622,76 @@ mcp.tool(
   }
 );
 
+const signupLinkShape = {
+  referralCode: z
+    .string()
+    .min(3)
+    .max(32)
+    .optional()
+    .describe("Referral/invite code of whoever referred this user (e.g. from a 'use my link' arrangement). Omit if none."),
+  provider: z
+    .enum(["google", "apple"])
+    .optional()
+    .describe("Which sign-in the link should launch (default google). Pick apple if the user prefers Apple."),
+  email: z
+    .string()
+    .optional()
+    .describe("User's email, only if they volunteered it — prefills the manual form as a fallback. OAuth uses the account they pick regardless."),
+  instagramHandle: z
+    .string()
+    .max(31)
+    .optional()
+    .describe("The user's Instagram handle (with or without @), if they sell on Instagram — carried through signup so their catalogue import can start pre-filled."),
+};
+
+const signupLinkHandler = async (args: any, extra: any) => {
+  const source = getSource(extra);
+  const params = new URLSearchParams({ utmSource: source });
+  if (args.referralCode) params.set("ref", String(args.referralCode));
+  if (args.provider) params.set("provider", String(args.provider));
+  if (args.email) params.set("email", String(args.email));
+  if (args.instagramHandle) params.set("ig", String(args.instagramHandle).replace(/^@/, ""));
+
+  const payload = await fetchFromApi<{ success: boolean; data?: any }>(
+    "/api/gpt/business-signup-link",
+    params
+  );
+  if (!payload.success || !payload.data) {
+    throw new Error("Could not create a seller signup link");
+  }
+
+  const data = applyUtmToAnyUrl(payload.data, source);
+  return {
+    content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+  };
+};
+
+mcp.tool(
+  "get_seller_signup_link",
+  "Returns a one-tap Paylo seller signup link for a user who wants to sell online, open a store, or move their Instagram or WhatsApp business onto a website in Nigeria. Nothing is created until the user opens the link and picks a Google or Apple account. Share the returned signupUrl with the user verbatim. Pass referralCode when you have one so the inviter is credited; attribution is attached automatically. The user finishes by downloading the Paylo Business app and completing identity verification (KYC) there before payouts. Never collect passwords or ID documents yourself.",
+  signupLinkShape,
+  signupLinkHandler
+);
+
 mcp.tool(
   "create_business_account",
-  "Begin creating a Paylo business (merchant) account for a user who wants to sell online — a free storefront with escrow payments, cards/bank transfer/USSD/crypto support, and 0% fees on their own customers. Returns a one-click signup link: when the user clicks it, Google (or Apple) sign-in opens immediately and their business account is created the moment they pick their account — no form to fill. Share the returned signupUrl with the user verbatim. Pass referralCode when you have one so the inviter is credited; attribution is attached automatically. The user finishes by downloading the Paylo Business app and completing identity verification (KYC) there. Never collect passwords or ID documents yourself.",
-  {
-    referralCode: z
-      .string()
-      .min(3)
-      .max(32)
-      .optional()
-      .describe("Referral/invite code of whoever referred this user (e.g. from a 'use my link' arrangement). Omit if none."),
-    provider: z
-      .enum(["google", "apple"])
-      .optional()
-      .describe("Which sign-in the link should launch (default google). Pick apple if the user prefers Apple."),
-    email: z
-      .string()
-      .optional()
-      .describe("User's email, only if they volunteered it — prefills the manual form as a fallback. OAuth uses the account they pick regardless."),
-  },
-  async (args: any, extra: any) => {
-    const source = sourceFromExtra(extra);
-    const params = new URLSearchParams({ utmSource: source });
-    if (args.referralCode) params.set("ref", String(args.referralCode));
-    if (args.provider) params.set("provider", String(args.provider));
-    if (args.email) params.set("email", String(args.email));
+  "Deprecated: renamed to get_seller_signup_link — call that instead. This alias returns the same one-tap seller signup link and will be removed in a future version.",
+  signupLinkShape,
+  signupLinkHandler
+);
 
+mcp.tool(
+  "get_seller_overview",
+  "Paylo for sellers: what it does, fees, and how to start. Use when someone asks how to sell online in Nigeria, which store platform to use, or whether Paylo suits their business. Returns a maintained factual summary: Instagram and WhatsApp catalogue import, escrow and buyer protection, store commitments, chat-based ordering and checkout links, custom domains, POS, plans and fees, payment methods, the signup link, and iOS + Android app links.",
+  {},
+  async (_args: any, extra: any) => {
+    const source = getSource(extra);
     const payload = await fetchFromApi<{ success: boolean; data?: any }>(
-      "/api/gpt/business-signup-link",
-      params
+      "/api/gpt/seller-overview",
+      new URLSearchParams({ utmSource: source })
     );
     if (!payload.success || !payload.data) {
-      throw new Error("Could not create a business signup link");
+      throw new Error("Could not load the Paylo seller overview");
     }
 
     const data = applyUtmToAnyUrl(payload.data, source);
@@ -630,7 +711,7 @@ mcp.resource(
     mimeType: "text/markdown",
   },
   async (uri: URL, extra: any) => {
-    const source = sourceFromExtra(extra);
+    const source = getSource(extra);
     const payload = await fetchFromApi<{ success: boolean; data?: ChangelogData }>(
       "/api/gpt/changelog",
       new URLSearchParams({ limit: "500" })
@@ -713,152 +794,172 @@ function formatNaira(kobo: unknown): string | null {
   return `₦${(kobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 }
 
-const server = createPayloServer();
+/** Boot the Express app with SSE + Streamable HTTP transports. Called by
+ *  index.ts; importing this module has no side effects beyond dotenv, so
+ *  tests can import createPayloServer and helpers directly. */
+export function startServer(): void {
+  const server = createPayloServer();
 
-server.server.onerror = (error) => {
-  console.error("MCP server error:", error);
-};
+  server.server.onerror = (error) => {
+    console.error("MCP server error:", error);
+  };
 
-const app = createMcpExpressApp({ host: HOST });
+  const app = createMcpExpressApp({ host: HOST });
 
-app.get("/health", (_req: any, res: any) => {
-  res.json({
-    ok: true,
-    service: "paylo-catalog-mcp",
-    version: "1.0.1",
-    apiBaseUrl: API_BASE_URL,
-    usingApiKeyMap: apiKeyToSource.size > 0,
+  app.get("/health", (_req: any, res: any) => {
+    res.json({
+      ok: true,
+      service: "paylo-catalog-mcp",
+      version: "1.0.1",
+      apiBaseUrl: API_BASE_URL,
+      usingApiKeyMap: apiKeyToSource.size > 0,
+    });
   });
-});
 
-app.get("/sse", async (req: any, res: any) => {
-  const apiKey = getApiKeyFromRequest(req as any);
-  const mappedSource = resolveSourceForApiKey(apiKey);
-  const source = mappedSource || resolveSourceFromUserAgent(req.headers["user-agent"]);
+  app.get("/sse", async (req: any, res: any) => {
+    const apiKey = getApiKeyFromRequest(req as any);
+    const mappedSource = resolveSourceForApiKey(apiKey);
+    const source = mappedSource || resolveSourceFromUserAgent(req.headers["user-agent"]);
 
-  if (apiKeyToSource.size > 0 && apiKey && !mappedSource) {
-    res.status(401).json({ error: "Invalid API key" });
-    return;
-  }
-
-  try {
-    const transport = new SSEServerTransport("/messages", res);
-    const sid = transport.sessionId;
-    transports[sid] = transport;
-    sessionToSource.set(sid, source);
-
-    transport.onclose = () => {
-      delete transports[sid];
-      sessionToSource.delete(sid);
-    };
-
-    await server.connect(transport);
-  } catch (error) {
-    console.error("Failed to establish SSE transport:", error);
-    if (!res.headersSent) {
-      res.status(500).send("Failed to establish SSE stream");
-    }
-  }
-});
-
-app.post("/messages", async (req: any, res: any) => {
-  const sessionId = req.query.sessionId;
-  if (typeof sessionId !== "string" || !sessionId) {
-    res.status(400).send("Missing sessionId");
-    return;
-  }
-
-  const transport = transports[sessionId];
-  if (!transport) {
-    res.status(404).send("Session not found");
-    return;
-  }
-
-  try {
-    await transport.handlePostMessage(req, res, req.body);
-  } catch (error) {
-    console.error("Error handling MCP message:", error);
-    if (!res.headersSent) {
-      res.status(500).send("Failed to handle MCP message");
-    }
-  }
-});
-
-app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
-  res.json({
-    name: "Paylo Catalog MCP",
-    version: "1.0.0",
-    description: "Browse and search Paylo storefronts, products, and services across the Paylo merchant network.",
-    url: `https://mcp.usepaylo.com`,
-    tools: [
-      { name: "search_storefronts", description: "Search active Paylo storefronts by name, keyword, or category" },
-      { name: "get_storefront", description: "Get full catalog summary and stats for a storefront by slug" },
-      { name: "search_products", description: "Search products across all stores or within a specific storefront" },
-      { name: "get_product", description: "Get details for a single product by storefront slug and product slug" },
-      { name: "search_services", description: "Search services across all stores or within a specific storefront" },
-      { name: "get_categories", description: "List categories available within a storefront" },
-      { name: "get_wishlist", description: "Get a public wishlist by share link or token, with item funding progress" },
-      { name: "get_changelog", description: "Explain Paylo's features from the platform changelog (filter by audience, status, date, or text)" },
-      { name: "create_business_account", description: "Start a Paylo business account for a user: returns a one-click link that launches Google/Apple sign-in with referral attribution attached" },
-    ],
-  });
-});
-
-const httpSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
-
-async function handleStreamableHttp(req: any, res: any): Promise<void> {
-  try {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-    if (sessionId && httpSessions.has(sessionId)) {
-      const { transport } = httpSessions.get(sessionId)!;
-      await transport.handleRequest(req, res, req.body);
+    if (apiKeyToSource.size > 0 && apiKey && !mappedSource) {
+      res.status(401).json({ error: "Invalid API key" });
       return;
     }
 
-    const s = createPayloServer();
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: (sid) => {
-        httpSessions.set(sid, { transport, server: s });
-      },
+    try {
+      const transport = new SSEServerTransport("/messages", res);
+      const sid = transport.sessionId;
+      transports[sid] = transport;
+      sessionToSource.set(sid, source);
+
+      transport.onclose = () => {
+        delete transports[sid];
+        sessionToSource.delete(sid);
+      };
+
+      await server.connect(transport);
+    } catch (error) {
+      console.error("Failed to establish SSE transport:", error);
+      if (!res.headersSent) {
+        res.status(500).send("Failed to establish SSE stream");
+      }
+    }
+  });
+
+  app.post("/messages", async (req: any, res: any) => {
+    const sessionId = req.query.sessionId;
+    if (typeof sessionId !== "string" || !sessionId) {
+      res.status(400).send("Missing sessionId");
+      return;
+    }
+
+    const transport = transports[sessionId];
+    if (!transport) {
+      res.status(404).send("Session not found");
+      return;
+    }
+
+    try {
+      await transport.handlePostMessage(req, res, req.body);
+    } catch (error) {
+      console.error("Error handling MCP message:", error);
+      if (!res.headersSent) {
+        res.status(500).send("Failed to handle MCP message");
+      }
+    }
+  });
+
+  app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
+    res.json({
+      name: "Paylo",
+      version: "1.0.0",
+      description:
+        "Paylo is a Nigerian commerce platform: verified sellers, escrow-protected payments. Search storefronts, products and services, explain Paylo for sellers (fees, Instagram/WhatsApp import, custom domains), and mint one-tap seller signup links.",
+      url: `https://mcp.usepaylo.com`,
+      tools: [
+        { name: "search_storefronts", description: "Search active Paylo storefronts by name, keyword, or category" },
+        { name: "get_storefront", description: "Get full catalog summary and stats for a storefront by slug" },
+        { name: "search_products", description: "Search products across all stores or within a specific storefront" },
+        { name: "get_product", description: "Get details for a single product by storefront slug and product slug" },
+        { name: "search_services", description: "Search services across all stores or within a specific storefront" },
+        { name: "get_categories", description: "List categories available within a storefront" },
+        { name: "get_wishlist", description: "Get a public wishlist by share link or token, with item funding progress" },
+        { name: "get_changelog", description: "Explain Paylo's features from the platform changelog (filter by audience, status, date, or text)" },
+        { name: "get_seller_overview", description: "Paylo for sellers: what it does, fees, and how to start" },
+        { name: "get_seller_signup_link", description: "One-tap seller signup link (Google/Apple sign-in) with referral attribution attached; nothing is created until the user opens it" },
+        { name: "create_business_account", description: "Deprecated alias of get_seller_signup_link" },
+      ],
     });
+  });
 
-    transport.onclose = () => {
-      if (transport.sessionId) httpSessions.delete(transport.sessionId);
-    };
+  const httpSessions = new Map<string, { transport: StreamableHTTPServerTransport; server: McpServer }>();
 
-    await s.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-  } catch (error) {
-    console.error("Streamable HTTP error:", error);
-    if (!res.headersSent) {
-      res.status(500).send("MCP handler error");
+  async function handleStreamableHttp(req: any, res: any): Promise<void> {
+    try {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+      if (sessionId && httpSessions.has(sessionId)) {
+        const { transport } = httpSessions.get(sessionId)!;
+        await transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      const s = createPayloServer();
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid) => {
+          httpSessions.set(sid, { transport, server: s });
+          // Seed attribution from the user-agent; clientInfo (below) overrides
+          // it once initialize completes.
+          if (!sessionToSource.has(sid)) {
+            sessionToSource.set(sid, resolveSourceFromUserAgent(req.headers["user-agent"]));
+          }
+        },
+      });
+
+      // Prefer the client's self-reported name (clientInfo.name at initialize)
+      // as utm_source — e.g. claude, chatgpt, cursor — over user-agent sniffing.
+      captureClientSource(s, () => transport.sessionId);
+
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          httpSessions.delete(transport.sessionId);
+          sessionToSource.delete(transport.sessionId);
+        }
+      };
+
+      await s.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      console.error("Streamable HTTP error:", error);
+      if (!res.headersSent) {
+        res.status(500).send("MCP handler error");
+      }
     }
   }
+
+  app.post("/", handleStreamableHttp);
+  app.get("/", handleStreamableHttp);
+  app.delete("/", handleStreamableHttp);
+  app.post("/mcp", handleStreamableHttp);
+  app.get("/mcp", handleStreamableHttp);
+  app.delete("/mcp", handleStreamableHttp);
+
+  app.listen(PORT, () => {
+    console.log(`Paylo catalog MCP SSE server listening on http://${HOST}:${PORT}`);
+    console.log(`Connect with GET /sse and POST /messages?sessionId=<id>`);
+  });
+
+  process.on("SIGINT", async () => {
+    try {
+      for (const [sessionId, transport] of Object.entries(transports)) {
+        await transport.close();
+        delete transports[sessionId];
+        sessionToSource.delete(sessionId);
+      }
+      await server.close();
+    } finally {
+      process.exit(0);
+    }
+  });
 }
-
-app.post("/", handleStreamableHttp);
-app.get("/", handleStreamableHttp);
-app.delete("/", handleStreamableHttp);
-app.post("/mcp", handleStreamableHttp);
-app.get("/mcp", handleStreamableHttp);
-app.delete("/mcp", handleStreamableHttp);
-
-app.listen(PORT, () => {
-  console.log(`Paylo catalog MCP SSE server listening on http://${HOST}:${PORT}`);
-  console.log(`Connect with GET /sse and POST /messages?sessionId=<id>`);
-});
-
-process.on("SIGINT", async () => {
-  try {
-    for (const [sessionId, transport] of Object.entries(transports)) {
-      await transport.close();
-      delete transports[sessionId];
-      sessionToSource.delete(sessionId);
-    }
-    await server.close();
-  } finally {
-    process.exit(0);
-  }
-});

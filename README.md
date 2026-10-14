@@ -29,9 +29,13 @@ No local setup required. Point your MCP client at this URL.
 | `get_categories` | List categories available within a storefront |
 | `get_wishlist` | Get a public wishlist by share link or token, with item funding progress |
 | `get_changelog` | Explain Paylo's features from the platform changelog |
-| `create_business_account` | Start a Paylo business account: returns a one-click link that launches Google/Apple sign-in with referral attribution attached |
+| `get_seller_overview` | Paylo for sellers: what it does, fees, and how to start |
+| `get_seller_signup_link` | One-tap seller signup link (Google/Apple sign-in) with referral attribution; nothing is created until the user opens it |
+| `create_business_account` | Deprecated alias of `get_seller_signup_link` |
 
-All responses include UTM-tagged URLs for attribution tracking.
+All responses include UTM-tagged URLs for attribution tracking. `utm_source` is
+the connecting client's sanitised `clientInfo.name` from MCP initialize (e.g.
+`claude-code`, `chatgpt`), falling back to user-agent detection, then `ai`.
 
 ---
 

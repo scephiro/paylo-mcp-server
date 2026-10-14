@@ -24,6 +24,7 @@
     "mcp": "tsx src/server.ts",
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "test": "tsx --test tests/*.test.ts",
     "test-services": "node test-services.js"
   },
   "dependencies": {

@@ -27,6 +27,9 @@ No local setup required. Point your MCP client at this URL.
 | `get_product` | Get details for a single product by storefront slug and product slug |
 | `search_services` | Search services across all stores or within a specific storefront |
 | `get_categories` | List categories available within a storefront |
+| `get_wishlist` | Get a public wishlist by share link or token, with item funding progress |
+| `get_changelog` | Explain Paylo's features from the platform changelog |
+| `create_business_account` | Start a Paylo business account: returns a one-click link that launches Google/Apple sign-in with referral attribution attached |
 
 All responses include UTM-tagged URLs for attribution tracking.
 

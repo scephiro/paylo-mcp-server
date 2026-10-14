@@ -579,6 +579,47 @@ mcp.tool(
   }
 );
 
+mcp.tool(
+  "create_business_account",
+  "Begin creating a Paylo business (merchant) account for a user who wants to sell online — a free storefront with escrow payments, cards/bank transfer/USSD/crypto support, and 0% fees on their own customers. Returns a one-click signup link: when the user clicks it, Google (or Apple) sign-in opens immediately and their business account is created the moment they pick their account — no form to fill. Share the returned signupUrl with the user verbatim. Pass referralCode when you have one so the inviter is credited; attribution is attached automatically. The user finishes by downloading the Paylo Business app and completing identity verification (KYC) there. Never collect passwords or ID documents yourself.",
+  {
+    referralCode: z
+      .string()
+      .min(3)
+      .max(32)
+      .optional()
+      .describe("Referral/invite code of whoever referred this user (e.g. from a 'use my link' arrangement). Omit if none."),
+    provider: z
+      .enum(["google", "apple"])
+      .optional()
+      .describe("Which sign-in the link should launch (default google). Pick apple if the user prefers Apple."),
+    email: z
+      .string()
+      .optional()
+      .describe("User's email, only if they volunteered it — prefills the manual form as a fallback. OAuth uses the account they pick regardless."),
+  },
+  async (args: any, extra: any) => {
+    const source = sourceFromExtra(extra);
+    const params = new URLSearchParams({ utmSource: source });
+    if (args.referralCode) params.set("ref", String(args.referralCode));
+    if (args.provider) params.set("provider", String(args.provider));
+    if (args.email) params.set("email", String(args.email));
+
+    const payload = await fetchFromApi<{ success: boolean; data?: any }>(
+      "/api/gpt/business-signup-link",
+      params
+    );
+    if (!payload.success || !payload.data) {
+      throw new Error("Could not create a business signup link");
+    }
+
+    const data = applyUtmToAnyUrl(payload.data, source);
+    return {
+      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+    };
+  }
+);
+
 mcp.resource(
   "paylo-changelog",
   "paylo://changelog",
@@ -758,6 +799,7 @@ app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
       { name: "get_categories", description: "List categories available within a storefront" },
       { name: "get_wishlist", description: "Get a public wishlist by share link or token, with item funding progress" },
       { name: "get_changelog", description: "Explain Paylo's features from the platform changelog (filter by audience, status, date, or text)" },
+      { name: "create_business_account", description: "Start a Paylo business account for a user: returns a one-click link that launches Google/Apple sign-in with referral attribution attached" },
     ],
   });
 });

@@ -19,7 +19,7 @@
     "build"
   ],
   "scripts": {
-    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "build": "tsc && node -e \"const fs=require('fs');fs.chmodSync('build/index.js','755');fs.copyFileSync('favicon.ico','build/favicon.ico')\"",
     "prepare": "npm run build",
     "mcp": "tsx src/server.ts",
     "watch": "tsc --watch",

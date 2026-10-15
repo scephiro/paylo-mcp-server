@@ -7,6 +7,9 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { randomUUID } from "crypto";
+import { readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { z } from "zod";
 
 dotenv.config();
@@ -872,9 +875,31 @@ export function startServer(): void {
     }
   });
 
-  // Directories (and Claude) show the favicon from the server's own origin.
-  // Point the usual icon paths at the main site so there is one source of truth.
-  for (const iconPath of ["/favicon.ico", "/favicon.svg", "/apple-touch-icon.png"]) {
+  // Directories (and Claude) show the favicon from the server's own origin,
+  // and some fetchers never follow redirects — so serve the .ico bytes
+  // directly, falling back to the main site only if the file is missing.
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  let favicon: Buffer | null = null;
+  for (const candidate of [path.join(moduleDir, "favicon.ico"), path.join(moduleDir, "..", "favicon.ico")]) {
+    try {
+      favicon = readFileSync(candidate);
+      break;
+    } catch {
+      // try the next location
+    }
+  }
+
+  app.get("/favicon.ico", (_req: any, res: any) => {
+    if (favicon) {
+      res.set("Content-Type", "image/x-icon");
+      res.set("Cache-Control", "public, max-age=86400");
+      res.send(favicon);
+    } else {
+      res.redirect(301, "https://usepaylo.com/favicon.ico");
+    }
+  });
+
+  for (const iconPath of ["/favicon.svg", "/apple-touch-icon.png"]) {
     app.get(iconPath, (_req: any, res: any) => {
       res.redirect(301, `https://usepaylo.com${iconPath}`);
     });

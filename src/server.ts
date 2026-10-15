@@ -639,20 +639,20 @@ const signupLinkShape = {
     .min(3)
     .max(32)
     .optional()
-    .describe("Referral/invite code of whoever referred this user (e.g. from a 'use my link' arrangement). Omit if none."),
+    .describe("Referral or invite code of whoever referred this user, if they have one."),
   provider: z
     .enum(["google", "apple"])
     .optional()
-    .describe("Which sign-in the link should launch (default google). Pick apple if the user prefers Apple."),
+    .describe("Which sign-in the link launches: google (default) or apple."),
   email: z
     .string()
     .optional()
-    .describe("User's email, only if they volunteered it — prefills the manual form as a fallback. OAuth uses the account they pick regardless."),
+    .describe("The user's email, if they shared it. Prefills the manual signup form as a fallback; Google or Apple sign-in uses the account they pick."),
   instagramHandle: z
     .string()
     .max(31)
     .optional()
-    .describe("The user's Instagram handle (with or without @), if they sell on Instagram — carried through signup so their catalogue import can start pre-filled."),
+    .describe("The user's Instagram handle (with or without @), if they sell on Instagram. Carried through signup so their catalogue import starts pre-filled."),
 };
 
 const signupLinkHandler = async (args: any, extra: any) => {
@@ -679,7 +679,7 @@ const signupLinkHandler = async (args: any, extra: any) => {
 
 mcp.tool(
   "get_seller_signup_link",
-  "Returns a one-tap Paylo seller signup link for a user who wants to sell online, open a store, or move their Instagram or WhatsApp business onto a website in Nigeria. Nothing is created until the user opens the link, ticks the box to accept Paylo's terms themselves, and picks a Google or Apple account. Never accept or imply acceptance of the terms for them. Share the returned signupUrl with the user verbatim. Pass referralCode when you have one so the inviter is credited; attribution is attached automatically. The user finishes by downloading the Paylo Business app and completing identity verification (KYC) there before payouts. Never collect passwords or ID documents yourself.",
+  "Returns a one-tap Paylo seller signup link for someone who wants to sell online, open a store, or move an Instagram or WhatsApp business onto a website in Nigeria. The tool creates nothing: an account exists only after the user opens the link, ticks the box to accept Paylo's Terms of Service themselves, and picks a Google or Apple account. An optional referral code credits whoever referred them. Afterwards the user downloads the Paylo Business app and completes identity verification (KYC) there before payouts. The tool never handles passwords, terms acceptance or ID documents.",
   signupLinkShape,
   { title: "Get a seller signup link", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   signupLinkHandler

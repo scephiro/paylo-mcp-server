@@ -210,6 +210,7 @@ mcp.tool(
     area: z.string().optional().describe("LGA/city area within a state, e.g. 'abuja-municipal'."),
     limit: z.number().int().min(1).max(200).optional(),
   },
+  { title: "Search Paylo stores", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
 
@@ -256,6 +257,7 @@ mcp.tool(
   {
     slug: z.string().min(1),
   },
+  { title: "Get a Paylo store", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
     const params = new URLSearchParams({ utmSource: source });
@@ -299,6 +301,7 @@ mcp.tool(
     page: z.number().int().min(1).optional(),
     limit: z.number().int().min(1).max(100).optional(),
   },
+  { title: "Search products", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
     const page = args.page || 1;
@@ -384,6 +387,7 @@ mcp.tool(
     storefrontSlug: z.string().min(1),
     productSlug: z.string().min(1),
   },
+  { title: "Get a product", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
     const params = new URLSearchParams({ utmSource: source });
@@ -435,6 +439,7 @@ mcp.tool(
     page: z.number().int().min(1).optional(),
     limit: z.number().int().min(1).max(100).optional(),
   },
+  { title: "Search services", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
     const page = args.page || 1;
@@ -519,6 +524,7 @@ mcp.tool(
   {
     storefrontSlug: z.string().min(1),
   },
+  { title: "Get a store's categories", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
     const params = new URLSearchParams({ utmSource: source });
@@ -543,6 +549,7 @@ mcp.tool(
       .min(1)
       .describe("A usepaylo.com/wishlist/... share link or the bare share token"),
   },
+  { title: "Get a shared wishlist", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
     const token = parseWishlistToken(args.urlOrToken);
@@ -601,6 +608,7 @@ mcp.tool(
     query: z.string().optional().describe("Free text over entry title and description, e.g. 'wishlist', 'POS', 'bookings'."),
     limit: z.number().int().min(1).max(500).optional().describe("Max entries to return (default 200)."),
   },
+  { title: "Get the Paylo changelog", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
     const source = getSource(extra);
     const params = new URLSearchParams();
@@ -668,15 +676,9 @@ const signupLinkHandler = async (args: any, extra: any) => {
 
 mcp.tool(
   "get_seller_signup_link",
-  "Returns a one-tap Paylo seller signup link for a user who wants to sell online, open a store, or move their Instagram or WhatsApp business onto a website in Nigeria. Nothing is created until the user opens the link and picks a Google or Apple account. Share the returned signupUrl with the user verbatim. Pass referralCode when you have one so the inviter is credited; attribution is attached automatically. The user finishes by downloading the Paylo Business app and completing identity verification (KYC) there before payouts. Never collect passwords or ID documents yourself.",
+  "Returns a one-tap Paylo seller signup link for a user who wants to sell online, open a store, or move their Instagram or WhatsApp business onto a website in Nigeria. Nothing is created until the user opens the link, ticks the box to accept Paylo's terms themselves, and picks a Google or Apple account. Never accept or imply acceptance of the terms for them. Share the returned signupUrl with the user verbatim. Pass referralCode when you have one so the inviter is credited; attribution is attached automatically. The user finishes by downloading the Paylo Business app and completing identity verification (KYC) there before payouts. Never collect passwords or ID documents yourself.",
   signupLinkShape,
-  signupLinkHandler
-);
-
-mcp.tool(
-  "create_business_account",
-  "Deprecated: renamed to get_seller_signup_link — call that instead. This alias returns the same one-tap seller signup link and will be removed in a future version.",
-  signupLinkShape,
+  { title: "Get a seller signup link", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   signupLinkHandler
 );
 
@@ -684,6 +686,7 @@ mcp.tool(
   "get_seller_overview",
   "Paylo for sellers: what it does, fees, and how to start. Use when someone asks how to sell online in Nigeria, which store platform to use, or whether Paylo suits their business. Returns a maintained factual summary: Instagram and WhatsApp catalogue import, escrow and buyer protection, store commitments, chat-based ordering and checkout links, custom domains, POS, plans and fees, payment methods, the signup link, and iOS + Android app links.",
   {},
+  { title: "Get the Paylo seller overview", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (_args: any, extra: any) => {
     const source = getSource(extra);
     const payload = await fetchFromApi<{ success: boolean; data?: any }>(
@@ -887,7 +890,6 @@ export function startServer(): void {
         { name: "get_changelog", description: "Explain Paylo's features from the platform changelog (filter by audience, status, date, or text)" },
         { name: "get_seller_overview", description: "Paylo for sellers: what it does, fees, and how to start" },
         { name: "get_seller_signup_link", description: "One-tap seller signup link (Google/Apple sign-in) with referral attribution attached; nothing is created until the user opens it" },
-        { name: "create_business_account", description: "Deprecated alias of get_seller_signup_link" },
       ],
     });
   });

@@ -31,7 +31,6 @@ No local setup required. Point your MCP client at this URL.
 | `get_changelog` | Explain Paylo's features from the platform changelog |
 | `get_seller_overview` | Paylo for sellers: what it does, fees, and how to start |
 | `get_seller_signup_link` | One-tap seller signup link (Google/Apple sign-in) with referral attribution; nothing is created until the user opens it |
-| `create_business_account` | Deprecated alias of `get_seller_signup_link` |
 
 All responses include UTM-tagged URLs for attribution tracking. `utm_source` is
 the connecting client's sanitised `clientInfo.name` from MCP initialize (e.g.

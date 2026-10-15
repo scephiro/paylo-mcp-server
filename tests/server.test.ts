@@ -64,25 +64,23 @@ describe("initialize", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tool list: rename, alias, overview, buyer tools untouched
+// Tool list: signup tool, overview, buyer tools, directory annotations
 // ---------------------------------------------------------------------------
 
 describe("tool list", () => {
-  test("has the renamed signup tool, deprecated alias, and seller overview", async () => {
+  test("has the signup tool and seller overview, and no deprecated alias", async () => {
     const { client } = await connect();
     const { tools } = await client.listTools();
     const byName = new Map(tools.map((t) => [t.name, t]));
 
     assert.ok(byName.has("get_seller_signup_link"), "get_seller_signup_link missing");
     assert.ok(byName.has("get_seller_overview"), "get_seller_overview missing");
-    assert.ok(byName.has("create_business_account"), "deprecated alias missing");
+    assert.ok(!byName.has("create_business_account"), "deprecated alias should be removed");
 
     assert.match(
       byName.get("get_seller_signup_link")!.description!,
       /^Returns a one-tap Paylo seller signup link/
     );
-    assert.match(byName.get("create_business_account")!.description!, /^Deprecated/);
-    assert.match(byName.get("create_business_account")!.description!, /get_seller_signup_link/);
     assert.match(byName.get("get_seller_overview")!.description!, /fees/);
   });
 
@@ -104,10 +102,21 @@ describe("tool list", () => {
     }
   });
 
-  test("signup tools accept the instagramHandle parameter", async () => {
+  test("every tool has a title and read-only annotations (Connectors Directory)", async () => {
     const { client } = await connect();
     const { tools } = await client.listTools();
-    for (const name of ["get_seller_signup_link", "create_business_account"]) {
+    assert.equal(tools.length, 10);
+    for (const tool of tools) {
+      assert.ok(tool.annotations?.title, `${tool.name} missing title`);
+      assert.equal(tool.annotations?.readOnlyHint, true, `${tool.name} missing readOnlyHint`);
+      assert.equal(tool.annotations?.destructiveHint, false, `${tool.name} missing destructiveHint`);
+    }
+  });
+
+  test("signup tool accepts the instagramHandle parameter", async () => {
+    const { client } = await connect();
+    const { tools } = await client.listTools();
+    for (const name of ["get_seller_signup_link"]) {
       const tool = tools.find((t) => t.name === name)!;
       const props = (tool.inputSchema as any).properties ?? {};
       assert.ok(props.instagramHandle, `${name} missing instagramHandle`);
@@ -119,7 +128,7 @@ describe("tool list", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Signup link tool + alias behaviour
+// Signup link tool
 // ---------------------------------------------------------------------------
 
 describe("get_seller_signup_link", () => {
@@ -151,13 +160,6 @@ describe("get_seller_signup_link", () => {
     assert.match(text, /utm_source=claude/);
     assert.match(text, /utm_medium=ai_recommendation/);
     assert.match(text, /utm_campaign=mcp_referral/);
-  });
-
-  test("deprecated alias returns the same payload", async () => {
-    const { client } = await connect("claude");
-    const renamed = await client.callTool({ name: "get_seller_signup_link", arguments: {} });
-    const alias = await client.callTool({ name: "create_business_account", arguments: {} });
-    assert.equal(resultText(alias), resultText(renamed));
   });
 });
 

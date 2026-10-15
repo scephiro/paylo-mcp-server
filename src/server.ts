@@ -872,6 +872,14 @@ export function startServer(): void {
     }
   });
 
+  // Directories (and Claude) show the favicon from the server's own origin.
+  // Point the usual icon paths at the main site so there is one source of truth.
+  for (const iconPath of ["/favicon.ico", "/favicon.svg", "/apple-touch-icon.png"]) {
+    app.get(iconPath, (_req: any, res: any) => {
+      res.redirect(301, `https://usepaylo.com${iconPath}`);
+    });
+  }
+
   app.get("/.well-known/mcp/server-card.json", (_req: any, res: any) => {
     res.json({
       name: "Paylo",

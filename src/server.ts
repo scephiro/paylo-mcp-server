@@ -906,6 +906,19 @@ export function startServer(): void {
         return;
       }
 
+      // Sessions live in memory, so a restart or redeploy forgets them. The
+      // MCP spec says an unknown session ID gets 404, which tells the client
+      // to start a new session; anything else leaves it stuck until the user
+      // reconnects by hand.
+      if (sessionId) {
+        res.status(404).json({
+          jsonrpc: "2.0",
+          error: { code: -32001, message: "Session not found. Start a new session." },
+          id: null,
+        });
+        return;
+      }
+
       const s = createPayloServer();
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),

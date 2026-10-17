@@ -18,7 +18,7 @@ https://mcp.usepaylo.com
 
 It speaks Streamable HTTP at `/` and `/mcp`, with legacy SSE at `/sse`. No account, API key or local setup is needed.
 
-**Claude:** add [Paylo from the Claude Connectors Directory](https://claude.ai/directory/connectors/paylo), or add a custom connector in Claude's connector settings with the URL `https://mcp.usepaylo.com`.
+**Claude:** add [Paylo from the Claude Connectors Directory](https://claude.ai/directory/paylo), or add a custom connector in Claude's connector settings with the URL `https://mcp.usepaylo.com`.
 
 **Other clients:** any MCP client that supports remote servers can connect to the same URL.
 

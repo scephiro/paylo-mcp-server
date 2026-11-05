@@ -211,7 +211,7 @@ mcp.tool(
       .describe("Canonical product category."),
     state: z.string().optional().describe("Nigerian state slug or name, e.g. 'lagos', 'ogun', 'abuja'/'FCT'."),
     area: z.string().optional().describe("LGA/city area within a state, e.g. 'abuja-municipal'."),
-    limit: z.number().int().min(1).max(200).optional(),
+    limit: z.number().int().min(1).max(200).optional().describe("Max storefronts to return (1–200, default 50)."),
   },
   { title: "Search Paylo stores", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
@@ -258,7 +258,7 @@ mcp.tool(
   "get_storefront",
   "Get a storefront catalog summary and stats by slug.",
   {
-    slug: z.string().min(1),
+    slug: z.string().min(1).describe("The storefront's slug — the path segment of its URL, e.g. 'greybox' for usepaylo.com/greybox (also returned by search_storefronts)."),
   },
   { title: "Get a Paylo store", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
@@ -298,11 +298,11 @@ mcp.tool(
   "search_products",
   "Search products by query, optionally scoped to a storefront and category, with pagination.",
   {
-    query: z.string().min(1),
-    storefrontSlug: z.string().optional(),
-    category: z.string().optional(),
-    page: z.number().int().min(1).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    query: z.string().min(1).describe("Free text over product name and description, e.g. 'iphone 13', 'shea butter'."),
+    storefrontSlug: z.string().optional().describe("Limit results to one store by its slug (from search_storefronts). Omit to search across all verified stores."),
+    category: z.string().optional().describe("Product category name or slug to filter by (see get_categories for a store's categories)."),
+    page: z.number().int().min(1).optional().describe("Result page, starting at 1 (default 1)."),
+    limit: z.number().int().min(1).max(100).optional().describe("Results per page (1–100, default 20)."),
   },
   { title: "Search products", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
@@ -387,8 +387,8 @@ mcp.tool(
   "get_product",
   "Get a single product by storefront slug and product slug.",
   {
-    storefrontSlug: z.string().min(1),
-    productSlug: z.string().min(1),
+    storefrontSlug: z.string().min(1).describe("The store's slug, e.g. 'greybox' (from search_storefronts or a product result)."),
+    productSlug: z.string().min(1).describe("The product's slug within that store (from search_products results)."),
   },
   { title: "Get a product", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
@@ -436,11 +436,11 @@ mcp.tool(
   "search_services",
   "Search services by query, optionally scoped to a storefront and category, with pagination.",
   {
-    query: z.string().min(1),
-    storefrontSlug: z.string().optional(),
-    category: z.string().optional(),
-    page: z.number().int().min(1).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    query: z.string().min(1).describe("Free text over service name and description, e.g. 'hair braiding', 'phone repair'."),
+    storefrontSlug: z.string().optional().describe("Limit results to one store by its slug (from search_storefronts). Omit to search across all verified stores."),
+    category: z.string().optional().describe("Service category name or slug to filter by."),
+    page: z.number().int().min(1).optional().describe("Result page, starting at 1 (default 1)."),
+    limit: z.number().int().min(1).max(100).optional().describe("Results per page (1–100, default 20)."),
   },
   { title: "Search services", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {
@@ -525,7 +525,7 @@ mcp.tool(
   "get_categories",
   "Get categories for a storefront slug.",
   {
-    storefrontSlug: z.string().min(1),
+    storefrontSlug: z.string().min(1).describe("The store's slug, e.g. 'greybox' (from search_storefronts)."),
   },
   { title: "Get a store's categories", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (args: any, extra: any) => {

@@ -7,8 +7,20 @@
     "url": "https://github.com/scephiro/paylo-mcp-server",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "websiteUrl": "https://usepaylo.com",
+  "icons": [
+    {
+      "src": "https://usepaylo.com/web-app-manifest-192x192.png",
+      "sizes": ["192x192"],
+      "mimeType": "image/png"
+    },
+    {
+      "src": "https://usepaylo.com/web-app-manifest-512x512.png",
+      "sizes": ["512x512"],
+      "mimeType": "image/png"
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",

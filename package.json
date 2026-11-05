@@ -1,6 +1,6 @@
 {
   "name": "paylo-mcp-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Universal commerce protocol for AI agents to browse, search, and interact with Paylo stores",
   "keywords": [
     "paylo",
@@ -28,13 +28,13 @@
     "test-services": "node test-services.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "dotenv": "^16.4.7",
-    "zod": "^3.24.2"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "dotenv": "^18.0.8",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^20.11.24",
-    "tsx": "^4.20.3",
-    "typescript": "^5.3.3"
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   }
 }

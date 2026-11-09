@@ -232,7 +232,11 @@ mcp.tool(
     const storefronts = (payload.data?.storefronts || []).map((store) => ({
       ...store,
       urls: {
-        storefront: withAIUTM(`${API_BASE_URL}/${store.slug}`, source),
+        // The API now sends `url` led by the store's own domain when it has
+        // one (usepaylo otherwise) — the storefront link follows it, so an
+        // assistant never shows usepaylo.com for a store that bought its own
+        // domain. The catalog endpoints are Paylo API URLs and stay put.
+        storefront: withAIUTM(store.url || `${API_BASE_URL}/${store.slug}`, source),
         products: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/products`, source),
         services: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/services`, source),
         categories: withAIUTM(`${API_BASE_URL}/api/gpt/catalog/${store.slug}/categories`, source),

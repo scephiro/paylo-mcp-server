@@ -49,6 +49,7 @@ yarn-error.log*
 .claude/
 
 # Private Development Files
+CLAUDE.md
 X402_IMPLEMENTATION_PLAN.md
 memory-bank/
 technical-planning/
@@ -56,6 +57,3 @@ scripts/
 
 # Keep example config public (override)
 !.cursor/mcp.example.json
-technical-planning/
-scripts/test-backend-connection.ts
-scripts/malicious_test.ts

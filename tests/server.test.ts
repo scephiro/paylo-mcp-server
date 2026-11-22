@@ -97,6 +97,7 @@ describe("tool list", () => {
       "get_categories",
       "get_wishlist",
       "get_changelog",
+      "search_guides",
     ]) {
       assert.ok(names.includes(expected), `${expected} missing`);
     }
@@ -105,7 +106,7 @@ describe("tool list", () => {
   test("every tool has a title and read-only annotations (Connectors Directory)", async () => {
     const { client } = await connect();
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 10);
+    assert.equal(tools.length, 11);
     for (const tool of tools) {
       assert.ok(tool.annotations?.title, `${tool.name} missing title`);
       assert.equal(tool.annotations?.readOnlyHint, true, `${tool.name} missing readOnlyHint`);
@@ -204,6 +205,29 @@ describe("buyer tools", () => {
     await client.callTool({ name: "get_categories", arguments: { storefrontSlug: "ada-store" } });
     const url = new URL(fetchCalls[0]);
     assert.equal(url.pathname, "/api/gpt/catalog/ada-store/categories");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Guides tool
+// ---------------------------------------------------------------------------
+
+describe("search_guides", () => {
+  test("proxies query and limit to the guides endpoint and tags links", async () => {
+    fetchResponse = {
+      success: true,
+      data: { guides: [{ title: "Escrow Payments in Nigeria", url: "https://usepaylo.com/blog/escrow-payments-nigeria" }] },
+    };
+    const { client } = await connect("claude");
+    const result = await client.callTool({
+      name: "search_guides",
+      arguments: { query: "escrow", limit: 3 },
+    });
+    const url = new URL(fetchCalls[0]);
+    assert.equal(url.pathname, "/api/gpt/guides");
+    assert.equal(url.searchParams.get("q"), "escrow");
+    assert.equal(url.searchParams.get("limit"), "3");
+    assert.match(resultText(result), /utm_source=claude/);
   });
 });
 

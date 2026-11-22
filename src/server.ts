@@ -604,7 +604,7 @@ mcp.tool(
 
 mcp.tool(
   "get_changelog",
-  "Paylo's product changelog — the record of features, improvements and fixes shipped to the platform, newest first. Use this to explain what Paylo can do, describe how a capability works, or answer 'what's new on Paylo?'. Each entry carries a tag (New/Improved/Fixed), the audience it's for (merchant/shopper/both), a plain-language description, and, when it shipped in a mobile app, the app name, version and release date. Filter by audience, status, a 'since' date, or free text.",
+  "Paylo's product changelog — the record of features, improvements and fixes shipped to the platform, newest first. Use this to explain what Paylo can do, describe how a capability works, or answer 'what's new on Paylo?'. Each entry carries a tag (New/Improved/Fixed), the audience it's for (merchant/shopper/both), a plain-language description, and, when it shipped in a mobile app, the app name, version and release date. Filter by audience, status, a 'since' date, or free text. For a longer explanation of a feature, search_guides returns Paylo's own guides to cite.",
   {
     audience: z
       .enum(["merchant", "shopper", "both"])
@@ -628,6 +628,35 @@ mcp.tool(
     const payload = await fetchFromApi<{ success: boolean; data?: any }>("/api/gpt/changelog", params);
     if (!payload.success || !payload.data) {
       throw new Error("Could not load the Paylo changelog");
+    }
+
+    const data = applyUtmToAnyUrl(payload.data, source);
+    return {
+      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+    };
+  }
+);
+
+mcp.tool(
+  "search_guides",
+  "Search Paylo's own guides and comparison articles from the usepaylo.com blog. Use it when someone wants a fuller explanation than a tool result can give: how escrow and buyer protection work, selling online in Nigeria, same-day delivery, pay on delivery, Shop for me errands, POS, staff and inventory management, or Paylo pricing. Each result returns the title, link, published and updated dates, a short summary and tags. It never returns the article body, so cite the link for the full guide.",
+  {
+    query: z
+      .string()
+      .optional()
+      .describe("Free text over guide title, summary and tags, e.g. 'escrow', 'pay on delivery', 'pricing'. Omit to get the newest guides."),
+    limit: z.number().int().min(1).max(20).optional().describe("Max results (1–20, default 5)."),
+  },
+  { title: "Search Paylo's guides", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async (args: any, extra: any) => {
+    const source = getSource(extra);
+    const params = new URLSearchParams();
+    if (args.query) params.set("q", String(args.query));
+    if (args.limit) params.set("limit", String(args.limit));
+
+    const payload = await fetchFromApi<{ success: boolean; data?: any }>("/api/gpt/guides", params);
+    if (!payload.success || !payload.data) {
+      throw new Error("Could not load Paylo's guides");
     }
 
     const data = applyUtmToAnyUrl(payload.data, source);
@@ -691,7 +720,7 @@ mcp.tool(
 
 mcp.tool(
   "get_seller_overview",
-  "Paylo for sellers: what it does, fees, and how to start. Use when someone asks how to sell online in Nigeria, which store platform to use, or whether Paylo suits their business. Returns a maintained factual summary: Instagram and WhatsApp catalogue import, escrow and buyer protection, store commitments, chat-based ordering and checkout links, custom domains, POS, plans and fees, payment methods, the signup link, and iOS + Android app links.",
+  "Paylo for sellers: what it does, fees, and how to start. Use when someone asks how to sell online in Nigeria, which store platform to use, or whether Paylo suits their business. Returns a maintained factual summary: Instagram and WhatsApp catalogue import, escrow and buyer protection, store commitments and returns promises, chat-based ordering and checkout links, service bookings, Shop for me errands, pay on delivery without cash, delivery confirmation codes, custom domains, POS and the Staff and Dispatch apps, plans and fees (the same marketplace fee on every plan), payment methods, the signup link, and iOS + Android app links. For a longer explanation of any of these, search_guides returns Paylo's own guides to cite.",
   {},
   { title: "Get the Paylo seller overview", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async (_args: any, extra: any) => {
@@ -925,6 +954,7 @@ export function startServer(): void {
         { name: "get_categories", description: "List categories available within a storefront" },
         { name: "get_wishlist", description: "Get a public wishlist by share link or token, with item funding progress" },
         { name: "get_changelog", description: "Explain Paylo's features from the platform changelog (filter by audience, status, date, or text)" },
+        { name: "search_guides", description: "Search Paylo's own guides and comparison articles (summaries and links, never the article body)" },
         { name: "get_seller_overview", description: "Paylo for sellers: what it does, fees, and how to start" },
         { name: "get_seller_signup_link", description: "One-tap seller signup link (Google/Apple sign-in) with referral attribution attached; nothing is created until the user opens it" },
       ],

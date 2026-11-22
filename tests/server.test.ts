@@ -206,6 +206,16 @@ describe("buyer tools", () => {
     const url = new URL(fetchCalls[0]);
     assert.equal(url.pathname, "/api/gpt/catalog/ada-store/categories");
   });
+
+  test("search_storefronts forwards the shopForMe filter", async () => {
+    fetchResponse = { success: true, data: { storefronts: [] } };
+    const { client } = await connect();
+    await client.callTool({ name: "search_storefronts", arguments: { query: "errands", shopForMe: true } });
+    const url = new URL(fetchCalls[0]);
+    assert.equal(url.pathname, "/api/gpt/storefronts");
+    assert.equal(url.searchParams.get("q"), "errands");
+    assert.equal(url.searchParams.get("shopForMe"), "true");
+  });
 });
 
 // ---------------------------------------------------------------------------

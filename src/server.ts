@@ -202,15 +202,16 @@ export function createPayloServer(
 
 mcp.tool(
   "search_storefronts",
-  "Discover verified, escrow-protected Paylo storefronts. Filter by Nigerian state, product category, area (LGA/city) and/or free text — e.g. 'phone sellers in Lagos' or 'beauty stores in Abuja'. Only quality-gated sellers are returned (verified, with a logo, a cover image and at least one live listing), ordered by number of live listings. Each result carries trust signals (verified, escrowProtected), location (state, area) and its storefront URL.",
+  "Discover verified, escrow-protected Paylo storefronts. Filter by Nigerian state, product category, area (LGA/city) and/or free text — e.g. 'phone sellers in Lagos' or 'beauty stores in Abuja'. Only quality-gated sellers are returned (verified, with a logo, a cover image and several live listings), ordered by relevance when there's a query and by number of live listings otherwise. Each result carries trust signals (verified, escrowProtected), location (state, area), a shopForMe flag (the store takes Shop for me errand jobs) and its storefront URL.",
   {
-    query: z.string().optional().describe("Free text over name, description, category and area."),
+    query: z.string().optional().describe("Free text over name, description, category and area. Understands word forms and synonyms (errand ≈ shop for me ≈ concierge)."),
     category: z
       .enum(["fashion", "beauty", "food-and-beverage", "home-and-living", "health", "electronics", "services"])
       .optional()
       .describe("Canonical product category."),
     state: z.string().optional().describe("Nigerian state slug or name, e.g. 'lagos', 'ogun', 'abuja'/'FCT'."),
     area: z.string().optional().describe("LGA/city area within a state, e.g. 'abuja-municipal'."),
+    shopForMe: z.boolean().optional().describe("true keeps only stores that take Shop for me (errand/concierge) jobs."),
     limit: z.number().int().min(1).max(200).optional().describe("Max storefronts to return (1–200, default 50)."),
   },
   { title: "Search Paylo stores", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -223,6 +224,7 @@ mcp.tool(
     if (args.category) params.set("category", String(args.category));
     if (args.state) params.set("state", String(args.state));
     if (args.area) params.set("area", String(args.area));
+    if (args.shopForMe) params.set("shopForMe", "true");
     params.set("limit", String(args.limit || 50));
 
     const payload = await fetchFromApi<{ success: boolean; data?: { storefronts: any[]; total?: number } }>(
@@ -300,7 +302,7 @@ mcp.tool(
 
 mcp.tool(
   "search_products",
-  "Search products by query, optionally scoped to a storefront and category, with pagination.",
+  "Search products by query, optionally scoped to a storefront and category, with pagination. The query understands word forms (bag/bags) and searches name, description, brand and type. In results, availability.quantity is null when the store doesn't publish stock counts — treat that as unknown, never as out of stock; availability.inStock is the signal to trust.",
   {
     query: z.string().min(1).describe("Free text over product name and description, e.g. 'iphone 13', 'shea butter'."),
     storefrontSlug: z.string().optional().describe("Limit results to one store by its slug (from search_storefronts). Omit to search across all verified stores."),
